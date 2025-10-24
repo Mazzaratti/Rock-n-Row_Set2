@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mazzaratti — Rock & Row Card</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --card: #f7f7f7;
+    --text: #222;
+    --accent: #d1382a;
+    --border: #ccc;
+    --cell: #fcfcfc;
+    --check: #2a7a3b;
+  }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 14px auto 22px;
+    padding: 0 14px;
+    text-align: center;
+  }
+  .logo {
+    width: 100%;
+    max-width: 600px;
+    margin: 6px auto 8px;
+  }
+  .logo img {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+  h1 {
+    margin: 6px 0 14px;
+    font-size: clamp(28px, 6vw, 48px);
+    font-weight: 900;
+    letter-spacing: .5px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    margin: 0 auto 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.06);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .cell {
+    position: relative;
+    background: var(--cell);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-height: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    transition: transform .08s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell:active { transform: scale(0.99) }
+  .artist {
+    font-weight: 800;
+    font-size: clamp(16px, 3.7vw, 22px);
+    line-height: 1.2;
+    padding: 0 4px;
+  }
+  /* checkbox overlay */
+  .mark {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s ease;
+  }
+  .mark::before {
+    content: "✓";
+    font-size: clamp(48px, 10vw, 72px);
+    color: var(--check);
+    text-shadow: 0 2px 0 #fff;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,.15));
+  }
+  .cell.checked .mark { opacity: 1 }
+  .qr {
+    margin-top: 12px;
+  }
+  .qr img {
+    width: 160px;
+    height: 160px;
+    object-fit: contain;
+    border: 4px solid #ddd;
+    padding: 6px;
+    background: #fff;
+    border-radius: 6px;
+  }
+  .hint {
+    margin-top: 8px;
+    color: #666;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo"><img id="logo" alt="Mazzaratti logo" src="assets/mazzaratti_logo.png"></div>
+    <h1 id="title">ROCK &amp; ROW</h1>
+
+    <div class="card">
+      <div id="grid" class="grid" aria-label="Rock & Row 3x3 card"></div>
+      <div class="qr">
+        <img id="qr" alt="QR" src="assets/qr.png">
+      </div>
+    </div>
+
+    <div class="hint">Tap a square to mark it ✓. Long-press the title to get a fresh card.</div>
+  </div>
+
+<script>
+/* ======= Auto-generate, tap-to-check, long-press for new card ======= */
+
+// Artist pool (deduped, trimmed to your catalog)
+const ARTISTS = Array.from(new Set([
+  "Paramore","Van Halen","Heart","Kim Carnes","Weezer","KT Tunstall","Alannah Myles",
+  "Ed Sheeran","Kenny Wayne Shepherd","Talking Heads","Gnarls Barkley","The Pretty Reckless",
+  "INXS","Simple Minds","Madonna","Elle King","Miley Cyrus","Gin Blossoms","The Offspring",
+  "Better Than Ezra","Miranda Lambert","Quarterflash","Pat Benatar","Melissa Etheridge",
+  "Concrete Blonde","No Doubt","The Cure","Georgia Satellites","Bruno Mars","Billy Squier",
+  "Alice In Chains","Shania Twain","Tom Petty","Pretenders","The Cars","Lit",
+  "Grace Potter and the Nocturnals","Chappell Roan","Rain Paris","The B-52's",
+  "Bryan Adams","Journey","The Cult","Collective Soul","Shinedown","Stevie Nicks & Tom Petty",
+  "AC/DC","REO Speedwagon","Wheatus","Scandal","Styx","Carrie Underwood",
+  "Amy Winehouse","'Til Tuesday","4 Non Blondes","P!nk","Led Zeppelin","Chris Isaak",
+  "Missing Persons","Alanis Morissette","The Outfield","The Cranberries",
+  "The Smithereens","The Black Keys","Goo Goo Dolls","Honeymoon Suite","The Darkness"
+]));
+
+const gridEl = document.getElementById('grid');
+let currentArtists = [];
+let holdTimer = null;
+
+// Pick 9 unique
+function pickNine() {
+  const arr = ARTISTS.slice();
+  for (let i=arr.length-1; i>0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0,9);
+}
+
+// Build the 3x3 grid
+function renderGrid(artists) {
+  gridEl.innerHTML = "";
+  artists.forEach((name, idx) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.idx = idx;
+
+    const span = document.createElement('div');
+    span.className = 'artist';
+    span.textContent = name;
+
+    const mark = document.createElement('div');
+    mark.className = 'mark';
+
+    cell.appendChild(span);
+    cell.appendChild(mark);
+    gridEl.appendChild(cell);
+  });
+  restoreChecks();
+}
+
+// Toggle check state
+function toggleCell(el) {
+  el.classList.toggle('checked');
+  persistChecks();
+}
+
+// Save checks in localStorage (keyed to this 9-artist combo)
+function storageKey() {
+  const key = currentArtists.join('|');
+  return 'rr_card_' + hashCode(key);
+}
+function persistChecks() {
+  const checked = Array.from(gridEl.children).map(c => c.classList.contains('checked') ? 1 : 0);
+  localStorage.setItem(storageKey(), JSON.stringify(checked));
+}
+function restoreChecks() {
+  try {
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    Array.from(gridEl.children).forEach((c, i) => {
+      if (arr[i]) c.classList.add('checked');
+    });
+  } catch {}
+}
+
+// Simple string hash
+function hashCode(s) {
+  let h = 0; for (let i=0;i<s.length;i++){ h=((h<<5)-h + s.charCodeAt(i))|0; } return Math.abs(h);
+}
+
+// New card
+function newCard() {
+  currentArtists = pickNine();
+  renderGrid(currentArtists);
+}
+
+// Tap handler
+gridEl.addEventListener('click', (e) => {
+  const cell = e.target.closest('.cell');
+  if (!cell) return;
+  toggleCell(cell);
+});
+
+// Long-press title for new card
+const titleEl = document.getElementById('title');
+titleEl.addEventListener('touchstart', startHold);
+titleEl.addEventListener('mousedown', startHold);
+titleEl.addEventListener('touchend', clearHold);
+titleEl.addEventListener('mouseup', clearHold);
+titleEl.addEventListener('mouseleave', clearHold);
+
+function startHold(e){
+  clearHold();
+  holdTimer = setTimeout(()=>{ newCard(); }, 1200); // 1.2s press
+}
+function clearHold(){
+  if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
+}
+
+// INIT — auto-generate on load
+newCard();
+</script>
+</body>
+</html>
