@@ -95,18 +95,6 @@
     filter: drop-shadow(0 2px 2px rgba(0,0,0,.15));
   }
   .cell.checked .mark { opacity: 1 }
-  .qr {
-    margin-top: 12px;
-  }
-  .qr img {
-    width: 160px;
-    height: 160px;
-    object-fit: contain;
-    border: 4px solid #ddd;
-    padding: 6px;
-    background: #fff;
-    border-radius: 6px;
-  }
   .hint {
     margin-top: 8px;
     color: #666;
@@ -121,35 +109,40 @@
 
     <div class="card">
       <div id="grid" class="grid" aria-label="Rock & Row 3x3 card"></div>
-
     </div>
 
-    <div class="hint">Tap a square to mark it ✓.</div>
+    <div class="hint">Tap a square to mark it ✓. (Long-press title for a new card.)</div>
   </div>
 
 <script>
-/* ======= Auto-generate, tap-to-check, long-press for new card ======= */
+/* ======= Persisted card per set, tap-to-check, long-press for new card ======= */
+
+const SET_ID = 'set2';                         // <-- IMPORTANT
+const CARD_KEY = `rr_current_card_${SET_ID}_v1`;
 
 // Artist pool (deduped, trimmed to your catalog)
 const ARTISTS = Array.from(new Set([
   "Shania Twain","Elle King","Miranda Lambert","The Cult","INXS","Quarterflash","Concrete Blonde",
   "Gin Blossoms","The Offspring","Billy Squire","The Smithereens","Pat Benatar",
   "Scandal","Tom Petty","Kim Carnes","LIT","Weezer","Journey",
-  "AC/DC","4Non Blonde","Talking Heads", "Alanis Morissette", "Post Selfie w/Band","Air Guitar Solo During Song"
+  "AC/DC","4Non Blonde","Talking Heads","Alanis Morissette",
+  "Post Selfie w/Band","Air Guitar Solo During Song"
 ]));
 
 const gridEl = document.getElementById('grid');
+const titleEl = document.getElementById('title');
+
 let currentArtists = [];
 let holdTimer = null;
 
 // Pick 9 unique
 function pickNine() {
   const arr = ARTISTS.slice();
-  for (let i=arr.length-1; i>0; i--) {
-    const j = Math.floor(Math.random()*(i+1));
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  return arr.slice(0,9);
+  return arr.slice(0, 9);
 }
 
 // Build the 3x3 grid
@@ -180,10 +173,10 @@ function toggleCell(el) {
   persistChecks();
 }
 
-// Save checks in localStorage (keyed to this 9-artist combo)
+// Save checks in localStorage (keyed to this 9-artist combo + set)
 function storageKey() {
   const key = currentArtists.join('|');
-  return 'rr_card_' + hashCode(key);
+  return `rr_checks_${SET_ID}_` + hashCode(key);
 }
 function persistChecks() {
   const checked = Array.from(gridEl.children).map(c => c.classList.contains('checked') ? 1 : 0);
@@ -202,12 +195,38 @@ function restoreChecks() {
 
 // Simple string hash
 function hashCode(s) {
-  let h = 0; for (let i=0;i<s.length;i++){ h=((h<<5)-h + s.charCodeAt(i))|0; } return Math.abs(h);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
 }
 
-// New card
+// Persist the current 9-card so refresh can't change it
+function saveCurrentCard() {
+  try { localStorage.setItem(CARD_KEY, JSON.stringify(currentArtists)); } catch {}
+}
+function loadSavedCard() {
+  try {
+    const raw = localStorage.getItem(CARD_KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+
+    // Validate: 9 unique strings that exist in ARTISTS
+    if (!Array.isArray(arr) || arr.length !== 9) return null;
+    if (new Set(arr).size !== 9) return null;
+    for (const n of arr) if (typeof n !== 'string' || !ARTISTS.includes(n)) return null;
+
+    return arr;
+  } catch {
+    return null;
+  }
+}
+
+// New card (ONLY when user long-presses title)
 function newCard() {
   currentArtists = pickNine();
+  saveCurrentCard();
   renderGrid(currentArtists);
 }
 
@@ -219,30 +238,28 @@ gridEl.addEventListener('click', (e) => {
 });
 
 // Long-press title for new card
-const titleEl = document.getElementById('title');
-titleEl.addEventListener('touchstart', startHold);
+titleEl.addEventListener('touchstart', startHold, { passive: true });
 titleEl.addEventListener('mousedown', startHold);
 titleEl.addEventListener('touchend', clearHold);
 titleEl.addEventListener('mouseup', clearHold);
 titleEl.addEventListener('mouseleave', clearHold);
 
-function startHold(e){
+function startHold() {
   clearHold();
-  holdTimer = setTimeout(()=>{ newCard(); }, 1200); // 1.2s press
+  holdTimer = setTimeout(() => { newCard(); }, 1200); // 1.2s press
 }
-function clearHold(){
-  if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
+function clearHold() {
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
 }
 
-// INIT — auto-generate on load
-newCard();
+// INIT — load saved card if present (so refresh doesn't generate a new one)
+const saved = loadSavedCard();
+if (saved) {
+  currentArtists = saved;
+  renderGrid(currentArtists);
+} else {
+  newCard(); // first-time visitors get a new card once, then it's locked to refresh
+}
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
