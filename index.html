@@ -14,34 +14,40 @@
     --cell: #fcfcfc;
     --check: #2a7a3b;
   }
+
   html, body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
   }
+
   .wrap {
     max-width: 760px;
     margin: 14px auto 22px;
     padding: 0 14px;
     text-align: center;
   }
+
   .logo {
     width: 100%;
     max-width: 600px;
     margin: 6px auto 8px;
   }
+
   .logo img {
     width: 100%;
     height: auto;
     object-fit: contain;
   }
-  h1 {
+
+  h2 {
     margin: 6px 0 14px;
     font-size: clamp(28px, 6vw, 48px);
     font-weight: 900;
     letter-spacing: .5px;
   }
+
   .card {
     background: #fff;
     border: 1px solid var(--border);
@@ -50,11 +56,13 @@
     margin: 0 auto 14px;
     box-shadow: 0 6px 24px rgba(0,0,0,.06);
   }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
   }
+
   .cell {
     position: relative;
     background: var(--cell);
@@ -68,15 +76,20 @@
     transition: transform .08s ease;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
   }
-  .cell:active { transform: scale(0.99) }
+
+  .cell:active {
+    transform: scale(0.99);
+  }
+
   .artist {
     font-weight: 800;
     font-size: clamp(16px, 3.7vw, 22px);
     line-height: 1.2;
     padding: 0 4px;
   }
-  /* checkbox overlay */
+
   .mark {
     position: absolute;
     inset: 0;
@@ -87,6 +100,7 @@
     opacity: 0;
     transition: opacity .15s ease;
   }
+
   .mark::before {
     content: "✓";
     font-size: clamp(48px, 10vw, 72px);
@@ -94,7 +108,11 @@
     text-shadow: 0 2px 0 #fff;
     filter: drop-shadow(0 2px 2px rgba(0,0,0,.15));
   }
-  .cell.checked .mark { opacity: 1 }
+
+  .cell.checked .mark {
+    opacity: 1;
+  }
+
   .hint {
     margin-top: 8px;
     color: #666;
@@ -102,49 +120,170 @@
   }
 </style>
 </head>
+
 <body>
   <div class="wrap">
-    <div class="logo"><img id="logo" alt="Mazzaratti logo" src="assets/Non-Bordered Logo.jpg"></div>
+    <div class="logo">
+      <img id="logo" alt="Mazzaratti logo" src="assets/Non-Bordered Logo.jpg">
+    </div>
+
     <h2 id="title">ROCK &amp; ROW<br>SET #2-BLACKOUT</h2>
 
     <div class="card">
       <div id="grid" class="grid" aria-label="Rock & Row 3x3 card"></div>
     </div>
 
-    <div class="hint">Tap a square to mark it ✓. (Long-press title for a new card.)</div>
+    <div class="hint">Tap a square to mark it ✓. Your card is locked for this show.</div>
   </div>
 
 <script>
-/* ======= Persisted card per set, tap-to-check, long-press for new card ======= */
+/*
+  CHANGE THIS FOR EVERY NEW SHOW / NEW BAND LIST.
 
-const SET_ID = 'set2';                         // <-- IMPORTANT
-const CARD_KEY = `rr_current_card_${SET_ID}_v1`;
+  Same SHOW_ID = same locked card.
+  New SHOW_ID = fresh locked card for that show.
+*/
+const SHOW_ID = 'show_2026_05_22_set2';
 
-// Artist pool (deduped, trimmed to your catalog)
+const CARD_KEY = `rr_current_card_${SHOW_ID}_v1`;
+
 const ARTISTS = Array.from(new Set([
-"Shania Twain","Elle King","Miranda Lambert","The Cars","INXS","Berlin","Quarterflash","Scandal","Kim Carnes","The Cult","Collective Soul","Concrete Blonde","Talking Heads","Stevie Nicks","The Offspring","Pat Benatar","Georgia Satellites","AC/DC","Styx","Lit","4 NonBlondes",
-  "Post Selfie w/Band","Air Guitar Solo During Song","Moonwalk Near Stage"
+  "Shania Twain",
+  "Elle King",
+  "Miranda Lambert",
+  "The Cars",
+  "INXS",
+  "Berlin",
+  "Quarterflash",
+  "Scandal",
+  "Kim Carnes",
+  "The Cult",
+  "Collective Soul",
+  "Concrete Blonde",
+  "Talking Heads",
+  "Stevie Nicks",
+  "The Offspring",
+  "Pat Benatar",
+  "Georgia Satellites",
+  "AC/DC",
+  "Styx",
+  "Lit",
+  "4 NonBlondes",
+  "Post Selfie w/Band",
+  "Air Guitar Solo During Song",
+  "Moonwalk Near Stage"
 ]));
 
 const gridEl = document.getElementById('grid');
-const titleEl = document.getElementById('title');
 
 let currentArtists = [];
-let holdTimer = null;
 
-// Pick 9 unique
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function hashCode(s) {
+  let h = 0;
+
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+
+  return Math.abs(h);
+}
+
 function pickNine() {
   const arr = ARTISTS.slice();
+
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
   }
+
   return arr.slice(0, 9);
 }
 
-// Build the 3x3 grid
+function storageKey() {
+  return `rr_checks_${SHOW_ID}_` + hashCode(currentArtists.join('|'));
+}
+
+function saveCurrentCard() {
+  safeSetItem(CARD_KEY, JSON.stringify(currentArtists));
+}
+
+function loadSavedCard() {
+  const raw = safeGetItem(CARD_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const arr = JSON.parse(raw);
+
+    if (!Array.isArray(arr)) return null;
+    if (arr.length !== 9) return null;
+    if (new Set(arr).size !== 9) return null;
+
+    for (const name of arr) {
+      if (typeof name !== 'string') return null;
+      if (!ARTISTS.includes(name)) return null;
+    }
+
+    return arr;
+  } catch {
+    return null;
+  }
+}
+
+function persistChecks() {
+  if (!currentArtists || currentArtists.length !== 9) {
+    return;
+  }
+
+  const checked = Array.from(gridEl.children).map(cell => {
+    return cell.classList.contains('checked') ? 1 : 0;
+  });
+
+  safeSetItem(storageKey(), JSON.stringify(checked));
+}
+
+function restoreChecks() {
+  const raw = safeGetItem(storageKey());
+
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const checked = JSON.parse(raw);
+
+    Array.from(gridEl.children).forEach((cell, i) => {
+      if (checked[i]) {
+        cell.classList.add('checked');
+      }
+    });
+  } catch {}
+}
+
 function renderGrid(artists) {
   gridEl.innerHTML = "";
+
   artists.forEach((name, idx) => {
     const cell = document.createElement('div');
     cell.className = 'cell';
@@ -161,104 +300,47 @@ function renderGrid(artists) {
     cell.appendChild(mark);
     gridEl.appendChild(cell);
   });
+
   restoreChecks();
 }
 
-// Toggle check state
-function toggleCell(el) {
-  el.classList.toggle('checked');
-  persistChecks();
-}
-
-// Save checks in localStorage (keyed to this 9-artist combo + set)
-function storageKey() {
-  const key = currentArtists.join('|');
-  return `rr_checks_${SET_ID}_` + hashCode(key);
-}
-function persistChecks() {
-  const checked = Array.from(gridEl.children).map(c => c.classList.contains('checked') ? 1 : 0);
-  localStorage.setItem(storageKey(), JSON.stringify(checked));
-}
-function restoreChecks() {
-  try {
-    const raw = localStorage.getItem(storageKey());
-    if (!raw) return;
-    const arr = JSON.parse(raw);
-    Array.from(gridEl.children).forEach((c, i) => {
-      if (arr[i]) c.classList.add('checked');
-    });
-  } catch {}
-}
-
-// Simple string hash
-function hashCode(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
-
-// Persist the current 9-card so refresh can't change it
-function saveCurrentCard() {
-  try { localStorage.setItem(CARD_KEY, JSON.stringify(currentArtists)); } catch {}
-}
-function loadSavedCard() {
-  try {
-    const raw = localStorage.getItem(CARD_KEY);
-    if (!raw) return null;
-    const arr = JSON.parse(raw);
-
-    // Validate: 9 unique strings that exist in ARTISTS
-    if (!Array.isArray(arr) || arr.length !== 9) return null;
-    if (new Set(arr).size !== 9) return null;
-    for (const n of arr) if (typeof n !== 'string' || !ARTISTS.includes(n)) return null;
-
-    return arr;
-  } catch {
-    return null;
-  }
-}
-
-// New card (ONLY when user long-presses title)
-function newCard() {
+function createFirstCardOnly() {
   currentArtists = pickNine();
   saveCurrentCard();
   renderGrid(currentArtists);
 }
 
-// Tap handler
-gridEl.addEventListener('click', (e) => {
+gridEl.addEventListener('click', function(e) {
   const cell = e.target.closest('.cell');
-  if (!cell) return;
-  toggleCell(cell);
+
+  if (!cell) {
+    return;
+  }
+
+  cell.classList.toggle('checked');
+  persistChecks();
 });
 
-// Long-press title for new card
-titleEl.addEventListener('touchstart', startHold, { passive: true });
-titleEl.addEventListener('mousedown', startHold);
-titleEl.addEventListener('touchend', clearHold);
-titleEl.addEventListener('mouseup', clearHold);
-titleEl.addEventListener('mouseleave', clearHold);
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'hidden') {
+    persistChecks();
+    saveCurrentCard();
+  }
+});
 
-function startHold() {
-  clearHold();
-  holdTimer = setTimeout(() => { newCard(); }, 1200); // 1.2s press
-}
-function clearHold() {
-  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-}
+window.addEventListener('pagehide', function() {
+  persistChecks();
+  saveCurrentCard();
+});
 
-// INIT — load saved card if present (so refresh doesn't generate a new one)
-const saved = loadSavedCard();
-if (saved) {
-  currentArtists = saved;
+const savedCard = loadSavedCard();
+
+if (savedCard) {
+  currentArtists = savedCard;
   renderGrid(currentArtists);
 } else {
-  newCard(); // first-time visitors get a new card once, then it's locked to refresh
+  createFirstCardOnly();
 }
 </script>
 </body>
 </html>
-
-
